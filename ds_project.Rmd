@@ -1,0 +1,228 @@
+
+<span style="color: Black; font-size: 22px">Predicting Survival of a person on Titanic </span>
+<br>
+by: <span style="color: Blue; font-size: 16px">Nauman Akram</span>
+
+```{r}
+## Necessary librarys to perform eda
+library(ggplot2)
+library(dplyr)
+
+```
+
+```{r}
+#loading dataset
+dataset <- read.csv("train.csv", stringsAsFactors = FALSE)
+str(dataset)
+```
+About Data: The dataset consist of above fields and my goal is to predict whether someone(test) will survive titanic disaster or not  
+
+
+```{r}
+#checking null values
+colSums(is.na(dataset))
+colSums(dataset=="")
+```
+
+
+After checking nulls in the dataset for embarked had only two missing fields can be imputed by any of its possibe values to remove missing data. 
+```{r}
+dataset$Embarked[dataset$Embarked==""]="C"
+
+# Checking how many features can be used as categorical (factors)
+apply(dataset,2, function(x) length(unique(x)))
+
+```
+Survived is our label/class for predicting, remaining are our features of dataset. Here, I will be coverting to factors so that I can you numeric values for my model
+```{r}
+
+cols<-c("Pclass","Sex","Embarked")
+for (i in cols){
+  dataset[,i] <- as.factor(dataset[,i])
+}
+
+str(dataset)
+```
+dataset Name contatins different titles that could be usefull knowing who was male, female, officer, or if one was married or not, so I removed titles from name through pattern matching 
+```{r}
+dataset$Title <- gsub('(.*, )|(\\..*)', '', dataset$Name)
+dataset$Title[dataset$Title == 'Mlle']<- 'Miss' 
+dataset$Title[dataset$Title == 'Ms']<- 'Miss'
+dataset$Title[dataset$Title == 'Mme']<- 'Mrs' 
+dataset$Title[dataset$Title == 'Lady']<- 'Miss'
+dataset$Title[dataset$Title == 'Dona']<- 'Miss'
+officer<- c('Capt','Col','Don','Dr','Jonkheer','Major','Rev','Sir','the Countess')
+dataset$Title[dataset$Title %in% officer]<-'Officer'
+
+dataset$Title<- as.factor(dataset$Title)
+
+str(dataset)
+```
+The dataset here we can see that passengerId is just continous no., don't add any information to predict survival, same goes for name (different charachters), ticket no. and cabins (although they could be used but there were in big numbers as indvidual cabins so using them as factors won't do much to our feature matrix) So we select remaining features!
+```{r}
+
+label <- dataset[,"Survived"]
+label_Survived <- dataset["Survived"]
+label_Survived <- as.factor(label_Survived[,])
+X <- dataset[, c("Title", "Pclass", "Sex", "Age", "SibSp", "Parch","Fare" , "Embarked")]
+
+```
+```{r}
+colSums(is.na(X))
+colSums(X=="")
+
+```
+After choosing features we still left with age that contains 177 null values, so I will impute avg age of female in null values(where sex is female) and avg age of male in male null values.
+
+```{r}
+# replacing missing values in age with mean values w.r.t to their Sex
+
+means = aggregate(X["Age"], list(X$Sex), mean,  na.rm = T, na.action=na.pass )
+means
+
+```
+As age was used as discrete no. in this dataset thats why I rounded them to get only integer part.
+```{r}
+f_mean <- round(means[1,"Age"])
+m_mean <- round(means[2,"Age"])
+
+f_mean
+m_mean
+
+```
+```{r}
+tail(X,n=30)
+```
+Subtiting mean values in age
+```{r}
+  
+for (i in which (is.na(X$Age) ))
+{
+  if(X[i,"Sex"]=="female")
+  {
+    X[i,"Age"] <- f_mean
+  }
+  else
+  {
+    X[i,"Age"] <- m_mean
+  }
+}
+
+```
+can be checked here
+```{r}
+tail(X, n=30)
+```
+confirming if any null still remains...
+```{r}
+colSums(is.na(X))
+```
+For factors we need to convert them to their numeric for correlation, so I made a copy in X1 before converting
+```{r}
+
+X1 <- data.frame(X)
+X$Embarked <- as.numeric(X$Embarked)
+X$Sex <- as.numeric(X$Sex)
+X$Title <- as.numeric(X$Title)
+X$Pclass <- as.numeric(X$Pclass)
+
+head(X)
+```
+```{r}
+str(X)
+```
+
+```{r}
+# pearson correleation by default method is pearson, else put method= c("spearman")
+X.cor = cor(X,X)
+X.cor
+palette = colorRampPalette(c("darkBlue", "SkyBlue", "Black")) (20)
+heatmap(x = X.cor, col = palette, symm = TRUE)
+
+```
+
+Correlation of features tells the dependency of vaiables the stronger color represennts stronger relation.
+
+```{r}
+LT<- dim(X)[1]
+
+ggplot(data = X1[1:LT , ],aes(x=Sex,fill=label_Survived))+geom_bar()
+
+```
+
+This graph shows more female survived and less didn't, and most of male didn't survive and only almost half number of female, male survived. 
+
+
+
+```{r}
+
+ggplot(data = X1[1:LT,],aes(x=Embarked,fill=label_Survived))+geom_bar(position="fill")+ylab("Frequency")
+
+```
+
+Embarked is port of embarkation C represents Cherboug, Q=Queenstown, S for Southampton, here we can see that Survival rate was higher in C than Q and S.
+
+```{r}
+
+ggplot(data = X1[1:LT,],aes(x=Pclass,fill=label_Survived))+geom_bar()
+
+```
+
+PClass is ticket class of passengers, 1st. 2nd, 3rd. It can be seen here that most deaths were in 3rd class and in 1st class more than half survived. In second class, half survived and half didn't.
+
+```{r}
+ggplot(data = X1[1:LT,],aes(x=Embarked,fill=label_Survived))+geom_bar(position="fill")+facet_wrap(~Pclass)
+```
+
+This graph is a drill down of both of above graphs as It shows survival of passengers in Pclass with respect to the ticket class.
+
+```{r}
+ggplot(data = X1[1:LT,],aes(x=Parch,fill=label_Survived))+geom_bar()
+```
+
+Parch represents no. of people (parents or children of a passenger) onboard, most of the survival here is of people travelling alone, and most of died passengers were also alone, where as people with big family (>2) didn't survive as much.
+
+---------------
+
+I choose 80 percent of data from overall dataset by using "sample" method and remaining data will be used to predict as testing my model. before doing this I have binded the label column with it as well so that after sample I get original corresponding class labels. 9 is choosing the label column and -9 is choosing rest of features.
+
+```{r}
+dataSet<- cbind(X1,label_Survived)
+
+smp_size <- floor(0.80 * nrow(dataSet))
+
+## set the seed to make your partition reproducible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(dataSet)), size = smp_size)
+train_y <- dataSet[train_ind, 9]
+test_y <- dataSet[-train_ind, 9]
+
+trainX <- dataSet[train_ind, -9]
+testX <- dataSet[-train_ind, -9]
+```
+
+using random forest algorithm to train and predict.
+```{r}
+library(randomForest)
+
+clf <- randomForest(train_y ~ . , data= trainX, ntree= 10)
+
+```
+```{r}
+pred <- predict(clf, newdata=testX)
+```
+
+Confusion matrix to check accuracy, sensitvity, Specificity-> how well it our model is predicting 
+
+```{r}
+library(caret)
+confusionMatrix(test_y, pred)
+
+```
+model is 81% accurate.
+
+```{r}
+
+print(postResample(pred=pred, obs=test_y))
+```
+
